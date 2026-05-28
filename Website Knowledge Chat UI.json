@@ -1,0 +1,71 @@
+{
+  "name": "Website Knowledge Chat UI",
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html>\n<html>\n<head>\n  <title>Website Knowledge Bot</title>\n  <style>\n    body {\n      font-family: Arial;\n      max-width: 900px;\n      margin: 35px auto;\n      background: #f5f5f5;\n    }\n\n    h2 {\n      text-align: center;\n    }\n\n    input, button {\n      padding: 12px;\n      font-size: 16px;\n      box-sizing: border-box;\n    }\n\n    #website {\n      width: 100%;\n      margin-bottom: 10px;\n    }\n\n    #chat {\n      background: white;\n      border: 1px solid #ddd;\n      border-radius: 12px;\n      padding: 20px;\n      height: 500px;\n      overflow-y: auto;\n      margin-bottom: 10px;\n    }\n\n    #question {\n      width: 75%;\n    }\n\n    button {\n      cursor: pointer;\n    }\n\n    #askBtn {\n      width: 24%;\n    }\n\n    #ingestBtn {\n      width: 100%;\n      margin-bottom: 10px;\n      background: #111827;\n      color: white;\n      border: none;\n      border-radius: 6px;\n    }\n\n    .user {\n      text-align: right;\n      color: #2563eb;\n      margin: 12px;\n    }\n\n    .bot {\n      text-align: left;\n      color: #111827;\n      margin: 12px;\n      white-space: pre-wrap;\n    }\n\n    .system {\n      text-align: left;\n      color: #059669;\n      margin: 12px;\n      white-space: pre-wrap;\n    }\n\n    .error {\n      color: #dc2626;\n      margin: 12px;\n    }\n  </style>\n</head>\n\n<body>\n\n<h2>Website Knowledge Bot</h2>\n\n<input\n  id=\"website\"\n  placeholder=\"Enter website URL, e.g. https://www.jntua.ac.in\"\n/>\n\n<button id=\"ingestBtn\" onclick=\"ingestWebsite()\">\n  Ingest Website\n</button>\n\n<div id=\"chat\"></div>\n\n<input\n  id=\"question\"\n  placeholder=\"Ask anything about this website...\"\n/>\n\n<button id=\"askBtn\" onclick=\"askQuestion()\">Ask</button>\n\n<script>\nconst INGEST_URL = \"https://clay-enrich-smashup.ngrok-free.dev/webhook/website-knowledge-bot\";\nconst ASK_URL = \"https://clay-enrich-smashup.ngrok-free.dev/webhook/website-knowledge-bot-query\";\n\nfunction normalizeUrl(url) {\n  return url.trim().replace(/\\/$/, \"\");\n}\n\nfunction addMessage(type, text) {\n  const chat = document.getElementById(\"chat\");\n  chat.innerHTML += `<div class=\"${type}\"><b>${type === \"user\" ? \"You\" : type === \"system\" ? \"System\" : \"Bot\"}:</b> ${text}</div>`;\n  chat.scrollTop = chat.scrollHeight;\n}\n\nasync function ingestWebsite() {\n  const websiteUrl = normalizeUrl(document.getElementById(\"website\").value);\n\n  if (!websiteUrl) {\n    alert(\"Enter website URL first\");\n    return;\n  }\n\n  addMessage(\"system\", `Ingesting ${websiteUrl}... This may take 30–60 seconds.`);\n\n  try {\n    const response = await fetch(INGEST_URL, {\n      method: \"POST\",\n      headers: {\n        \"Content-Type\": \"application/json\"\n      },\n      body: JSON.stringify({ websiteUrl })\n    });\n\n    if (!response.ok) {\n      addMessage(\"error\", \"Ingestion request failed. Check n8n Knowledge Ingestion executions.\");\n      return;\n    }\n\n    addMessage(\"system\", \"Ingestion started successfully. Wait 30–60 seconds, then ask questions.\");\n  } catch (error) {\n    addMessage(\"error\", \"Could not call ingestion workflow. Check webhook URL.\");\n  }\n}\n\nasync function askQuestion() {\n  const websiteUrl = normalizeUrl(document.getElementById(\"website\").value);\n  const question = document.getElementById(\"question\").value.trim();\n\n  if (!websiteUrl || !question) {\n    alert(\"Enter website URL and question\");\n    return;\n  }\n\n  addMessage(\"user\", question);\n  document.getElementById(\"question\").value = \"\";\n\n  try {\n    const response = await fetch(ASK_URL, {\n      method: \"POST\",\n      headers: {\n        \"Content-Type\": \"application/json\"\n      },\n      body: JSON.stringify({\n        websiteUrl,\n        question\n      })\n    });\n\n    const data = await response.json();\n\n    addMessage(\"bot\", data.answer || \"No answer returned.\");\n  } catch (error) {\n    addMessage(\"error\", \"Bot failed. Check Website Knowledge Bot executions.\");\n  }\n}\n\ndocument.getElementById(\"question\").addEventListener(\"keydown\", function(e) {\n  if (e.key === \"Enter\") askQuestion();\n});\n</script>\n\n</body>\n</html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        48,
+        -96
+      ],
+      "id": "8b618c93-d6ae-4ad1-9d48-ed385d5c26e8",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "path": "website-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -192,
+        -96
+      ],
+      "id": "f4f87dc6-1f88-451a-9176-6c0df098a844",
+      "name": "Webhook",
+      "webhookId": "600777c6-c50f-4d2a-9fd3-a4f007c69353"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "003c3bec-7a4e-439b-972d-cdb000b2b85e",
+  "meta": {
+    "instanceId": "4518c64eb9180e460b9626661124584bcc65f7380a92a77be9504db062a6324e"
+  },
+  "id": "Mo7TBiu2C7CFXsia",
+  "tags": []
+}
