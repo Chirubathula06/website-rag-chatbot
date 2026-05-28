@@ -1,0 +1,326 @@
+{
+  "name": "Website Knowledge Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-knowledge-bot-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -560,
+        -144
+      ],
+      "id": "a83b6ee7-2590-4045-b6b9-3dec6ea05af3",
+      "name": "Webhook",
+      "webhookId": "cdd5c5e8-aace-4975-8502-7c2e12d3c9c5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{$json.question}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -192,
+        -144
+      ],
+      "id": "04f9a313-1b67-497c-a631-be009b1fa127",
+      "name": "OpenAI Question Embedding"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{\"https://4f5298c0-4a80-461e-a060-4761187d5b5e.eu-west-2-0.aws.cloud.qdrant.io:6333/collections/\" + $json.collectionName + \"/points/search\"}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "YOUR_QDRANT_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vector",
+              "value": "={{$json.embedding}}"
+            },
+            {
+              "name": "limit",
+              "value": "={{5}}"
+            },
+            {
+              "name": "with_payload",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        192,
+        -144
+      ],
+      "id": "10618c92-fdb2-4fd8-bb2e-723b91c54d46",
+      "name": "Qdrant Search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.result || [];\n\nconst websiteUrl = $('Webhook').item.json.body.websiteUrl\n  .trim()\n  .replace(/\\/$/, '');\n\nconst question = $('Webhook').item.json.body.question;\n\nconst context = results\n  .map((r, i) => {\n    const p = r.payload || {};\n    return `Source ${i + 1}: ${p.url}\nTitle: ${p.title}\nContent:\n${p.content}`;\n  })\n  .join('\\n\\n---\\n\\n');\n\nreturn [\n  {\n    json: {\n      websiteUrl,\n      question,\n      context\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -144
+      ],
+      "id": "cfc6ffa0-1bc0-4e85-b358-001eb37e8b2c",
+      "name": "Build Context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        848,
+        -144
+      ],
+      "id": "244c3853-4c49-4a28-94bb-90b08a6bb57a",
+      "name": "OpenAI Answer"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\n  {\n    answer: $json.choices[0].message.content\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1024,
+        -144
+      ],
+      "id": "4bb9e008-865e-4d3d-b6bf-f12dce98547c",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      model: \"gpt-4o-mini\",\n      temperature: 0.2,\n      messages: [\n        {\n          role: \"system\",\n          content: \"You are a Website Knowledge Bot. Answer only using the provided context. If the answer is not found, say: I couldn't find that on this website. Always include source URLs.\"\n        },\n        {\n          role: \"user\",\n          content: `Website: ${$json.websiteUrl}\n\nQuestion:\n${$json.question}\n\nContext:\n${$json.context}`\n        }\n      ]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -144
+      ],
+      "id": "193a1793-a104-4f5f-9ca7-577548922f25",
+      "name": "Build OpenAI Body"
+    },
+    {
+      "parameters": {
+        "jsCode": "const websiteUrl = $json.body.websiteUrl.trim().replace(/\\/$/, '');\n\nconst collectionName =\n  'website_' +\n  websiteUrl\n    .replace(/^https?:\\/\\//, '')\n    .replace(/[^a-zA-Z0-9]/g, '_')\n    .replace(/_+$/, '');\n\nreturn [\n  {\n    json: {\n      websiteUrl,\n      question: $json.body.question,\n      collectionName\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -144
+      ],
+      "id": "ff5eb5dd-f52b-42fd-bdb3-e762fb5981a3",
+      "name": "Build Collection Name"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        688,
+        -144
+      ],
+      "id": "793a4f3c-1ec1-436e-a4bb-6ef340f989e3",
+      "name": "Wait",
+      "webhookId": "665e9079-6995-4b80-8215-e015eac33b7b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const collectionData = $('Build Collection Name').first().json;\n\nreturn [\n  {\n    json: {\n      collectionName: collectionData.collectionName,\n      websiteUrl: collectionData.websiteUrl,\n      question: collectionData.question,\n      embedding: $json.data[0].embedding\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -144
+      ],
+      "id": "19c41c0a-379e-4179-9366-a4d4fbb17cab",
+      "name": "Prepare Qdrant Search"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Collection Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Question Embedding": {
+      "main": [
+        [
+          {
+            "node": "Prepare Qdrant Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Search": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Build OpenAI Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Answer": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenAI Body": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Collection Name": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Question Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Qdrant Search": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6150e95c-fc61-4861-a2be-266107b6fcdd",
+  "meta": {
+    "instanceId": "4518c64eb9180e460b9626661124584bcc65f7380a92a77be9504db062a6324e"
+  },
+  "id": "CVxPyXebg2ltz37b",
+  "tags": []
+}
