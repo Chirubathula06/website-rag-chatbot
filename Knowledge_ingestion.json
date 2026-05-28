@@ -1,0 +1,371 @@
+{
+  "name": "Knowledge ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-knowledge-bot",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2688,
+        -864
+      ],
+      "id": "f9bc51e7-67bf-4ef8-b62d-8bc50bb3477f",
+      "name": "Webhook",
+      "webhookId": "c87c28cb-5b6b-42ea-90ef-5278e4d0bfb9"
+    },
+    {
+      "parameters": {
+        "resource": "Crawling",
+        "operation": "crawl",
+        "url": "={{$node[\"Build Collection Name\"].json.websiteUrl}}",
+        "limit": 20,
+        "crawlOptions": {},
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        -2016,
+        -864
+      ],
+      "id": "2ed7356c-280f-4c97-9143-046d94992c01",
+      "name": "Crawl a website and scrape all pages",
+      "credentials": {
+        "firecrawlApi": {
+          "id": "1o3EA4zVhka9jXvX",
+          "name": "Firecrawl account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Crawling",
+        "operation": "getCrawlStatus",
+        "crawlId": "={{$json.id}}",
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        -1568,
+        -864
+      ],
+      "id": "e6ad2a8e-9147-45ca-bbb3-3ddb7651bbe4",
+      "name": "Get crawl status",
+      "credentials": {
+        "firecrawlApi": {
+          "id": "1o3EA4zVhka9jXvX",
+          "name": "Firecrawl account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pages = $json.data?.data || [];\n\nreturn pages\n  .map(page => ({\n    json: {\n      url: page.metadata?.sourceURL || page.url || '',\n      title: page.metadata?.title || '',\n      content: page.markdown || ''\n    }\n  }))\n  .filter(item => item.json.content.length > 200);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1344,
+        -864
+      ],
+      "id": "7f5fe93f-c401-44d2-b728-306bdef6ac23",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const chunkSize = 1000;\nconst overlap = 150;\nconst output = [];\n\nfor (const item of items) {\n  const text = item.json.content || '';\n  const websiteUrl = $('Webhook').first().json.body.websiteUrl;\n\n  for (let i = 0; i < text.length; i += chunkSize - overlap) {\n    const chunk = text.slice(i, i + chunkSize);\n\n    if (chunk.length > 100) {\n      output.push({\n        json: {\n          id: Buffer.from(`${item.json.url}-${i}`)\n            .toString('base64')\n            .replace(/[^a-zA-Z0-9]/g, '')\n            .slice(0, 32),\n          websiteUrl,\n          url: item.json.url,\n          title: item.json.title,\n          content: chunk\n        }\n      });\n    }\n  }\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -864
+      ],
+      "id": "73e8e1ec-cc50-4248-b85e-88a7425066c7",
+      "name": "Code Chunk Splitter"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization ",
+              "value": "Bearer YOUR_OPENAI_API_KEY",
+              "note": "Replace this placeholder locally. Do not commit real keys."
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{$json.content}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -896,
+        -864
+      ],
+      "id": "26f9dc99-93ac-478b-9b26-2aae5fd3b629",
+      "name": "OpenAI Embeddings"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://4f5298c0-4a80-461e-a060-4761187d5b5e.eu-west-2-0.aws.cloud.qdrant.io:6333/collections/{{$items(\"Build Collection Name\")[0].json.collectionName}}/points?wait=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "YOUR_QDRANT_API_KEY",
+              "note": "Replace this placeholder locally. Do not commit real keys."
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "points",
+              "value": "={{$json.points}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -480,
+        -864
+      ],
+      "id": "774f0f06-3c78-4b9c-8534-f00db4134b1f",
+      "name": "Qdrant Upsert"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const chunk = $('Code Chunk Splitter').all()[index].json;\n\n  const normalizedWebsiteUrl = chunk.websiteUrl\n    .trim()\n    .replace(/\\/$/, '');\n\n  return {\n    json: {\n      points: [\n        {\n          id: Date.now() + index,\n          vector: item.json.data[0].embedding,\n          payload: {\n            websiteUrl: normalizedWebsiteUrl,\n            url: chunk.url,\n            title: chunk.title,\n            content: chunk.content\n          }\n        }\n      ]\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        -864
+      ],
+      "id": "13a9f845-7b4b-47b2-9fda-e10cdaa1ed9d",
+      "name": "Code Build Qdrant Body"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1792,
+        -864
+      ],
+      "id": "6a25c41e-b7b4-4b2e-a6b4-df1ccfe3fec4",
+      "name": "Wait",
+      "webhookId": "ead3e7e7-b449-417e-ade3-0687a0e90490"
+    },
+    {
+      "parameters": {
+        "jsCode": "const websiteUrl = $json.body.websiteUrl.trim().replace(/\\/$/, '');\n\nconst collectionName = 'website_' + websiteUrl\n  .replace(/^https?:\\/\\//, '')\n  .replace(/[^a-zA-Z0-9]/g, '_')\n  .replace(/_+$/, '');\n\nreturn [\n  {\n    json: {\n      websiteUrl,\n      collectionName\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2464,
+        -864
+      ],
+      "id": "7167826f-4480-4467-91cf-5ec78553b39a",
+      "name": "Build Collection Name"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://4f5298c0-4a80-461e-a060-4761187d5b5e.eu-west-2-0.aws.cloud.qdrant.io:6333/collections/{{$json.collectionName}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "YOUR_QDRANT_API_KEY",
+              "note": "Replace this placeholder locally. Do not commit real keys."
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"vectors\": {\n    \"size\": 1536,\n    \"distance\": \"Cosine\"\n  }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2240,
+        -864
+      ],
+      "id": "3d4e6ff3-2c1b-4d56-af70-e60d934d615c",
+      "name": "Create Qdrant Collection"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Collection Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl a website and scrape all pages": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get crawl status": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code Chunk Splitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Chunk Splitter": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Code Build Qdrant Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Build Qdrant Body": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get crawl status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Collection Name": {
+      "main": [
+        [
+          {
+            "node": "Create Qdrant Collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Qdrant Collection": {
+      "main": [
+        [
+          {
+            "node": "Crawl a website and scrape all pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "aca912e7-f26a-4e4d-83f0-ad9e5b751fd8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4518c64eb9180e460b9626661124584bcc65f7380a92a77be9504db062a6324e"
+  },
+  "id": "2xR7UOjjRJdFFJzu",
+  "tags": []
+}
